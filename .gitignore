@@ -1,0 +1,16 @@
+# Ignore everything
+*
+
+# But not source files
+!*.h
+!*.md
+!*.cpp
+!.gitignore
+!CMakeLists.txt
+
+# Also, do not ignore directories, as they may contain source files
+!*/
+
+# Ignore cmake build directories
+build*
+cmake-build*
