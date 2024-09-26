@@ -16,8 +16,8 @@ set(CMAKE_LINKER lld)
 add_compile_options(-Wall -Wextra -Werror)
 
 # Use libc++
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+# set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
 
 # Generate compile_commands.json
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -32,11 +32,11 @@ file(GLOB_RECURSE HEADERS "inc/*.h")
 add_executable(kale ${SOURCES} ${HEADERS})
 
 # Find and link LLVM
-find_package(LLVM REQUIRED CONFIG)
-llvm_map_components_to_libnames(llvm_libs all)
+# find_package(LLVM REQUIRED CONFIG)
+# llvm_map_components_to_libnames(llvm_libs all)
 
 # Link against LLVM libraries
-target_link_libraries(kale ${llvm_libs})
+target_link_libraries(kale LLVM)
 
 # Include directories
 target_include_directories(kale PRIVATE inc)
