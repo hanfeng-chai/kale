@@ -1,19 +1,35 @@
 #include "ast.h"
+#include "llvm.h"
 
-#include <llvm/ADT/APFloat.h>
-#include <llvm/ADT/STLExtras.h>
-#include <llvm/IR/Constants.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Value.h>
-#include <llvm/IR/Verifier.h>
 #include <map>
 
 llvm::LLVMContext theContext;
 llvm::IRBuilder<> Builder(theContext);
-llvm::Module theModule("my coll jit", theContext);
+llvm::Module theModule("my cool jit", theContext);
 std::map<std::string, llvm::Value *> NamedValues;
+
+// pass and analysis manager
+auto theFunctionPassManager = llvm::FunctionPassManager();
+auto theLoopAnalysisManager = llvm::LoopAnalysisManager();
+auto theFunctionAnalysisManager = llvm::FunctionAnalysisManager();
+auto theCGSCCAnalysisManager = llvm::CGSCCAnalysisManager();
+auto theModuleAnalysisManager = llvm::ModuleAnalysisManager();
+auto thePassInstrumentationCallbacks = llvm::PassInstrumentationCallbacks();
+auto theStandardInstrumentations =
+    llvm::StandardInstrumentations(theContext, true);
+auto thePassBuilder = llvm::PassBuilder();
+auto _ = (theStandardInstrumentations.registerCallbacks(
+              thePassInstrumentationCallbacks, &theModuleAnalysisManager),
+          theFunctionPassManager.addPass(llvm::InstCombinePass()),
+          theFunctionPassManager.addPass(llvm::ReassociatePass()),
+          theFunctionPassManager.addPass(llvm::GVNPass()),
+          theFunctionPassManager.addPass(llvm::SimplifyCFGPass()),
+          thePassBuilder.registerModuleAnalyses(theModuleAnalysisManager),
+          thePassBuilder.registerFunctionAnalyses(theFunctionAnalysisManager),
+          thePassBuilder.crossRegisterProxies(
+              theLoopAnalysisManager, theFunctionAnalysisManager,
+              theCGSCCAnalysisManager, theModuleAnalysisManager),
+          nullptr);
 
 llvm::Value *NumExprAST::codegen() {
   return llvm::ConstantFP::get(theContext, llvm::APFloat(val));
@@ -72,5 +88,6 @@ llvm::Function *FuncAST::codegen() {
   auto value = body->codegen();
   Builder.CreateRet(value);
   llvm::verifyFunction(*func);
+  theFunctionPassManager.run(*func, theFunctionAnalysisManager);
   return func;
 }
