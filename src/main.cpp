@@ -1,19 +1,36 @@
 #include <iostream>
+#include <llvm/ADT/APFloat.h>
+#include <llvm/ADT/STLExtras.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Value.h>
+#include <llvm/IR/Verifier.h>
 
 #include "parser.h"
 
 Parser parser;
 
 void handleExt() {
-  parser.parseExt().dump();
+  auto ast = parser.parseExt();
+  ast.dump();
+  std::cerr << std::endl;
+  ast.codegen()->print(llvm::errs());
   std::cerr << std::endl;
 }
 void handleDef() {
-  parser.parseFunc().dump();
+  auto ast = parser.parseFunc();
+  ast.dump();
+  std::cerr << std::endl;
+  ast.codegen()->print(llvm::errs());
   std::cerr << std::endl;
 }
 void handleExp() {
-  parser.parseExpr()->dump();
+  auto ast = parser.parseExpr();
+  ast->dump();
+  std::cerr << std::endl;
+  ast->codegen()->print(llvm::errs());
   std::cerr << std::endl;
 }
 

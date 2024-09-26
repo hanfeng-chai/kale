@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <llvm/IR/Value.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -10,7 +11,9 @@ struct AST {
   virtual ~AST() = default;
 };
 
-struct ExprAST : AST {};
+struct ExprAST : AST {
+  virtual llvm::Value *codegen() = 0;
+};
 using ExprPtr = std::unique_ptr<ExprAST>;
 using ExprVec = std::vector<ExprPtr>;
 
@@ -18,12 +21,14 @@ struct NumExprAST : ExprAST {
   double val;
   NumExprAST(double val) : val(val) {}
   virtual void dump() override { std::cerr << val; }
+  virtual llvm::Value *codegen() override;
 };
 
 struct VarExprAST : ExprAST {
   std::string name;
   VarExprAST(std::string name) : name(std::move(name)) {}
   virtual void dump() override { std::cerr << name; }
+  virtual llvm::Value *codegen() override;
 };
 
 struct BinExprAST : ExprAST {
@@ -39,6 +44,7 @@ struct BinExprAST : ExprAST {
     rhs->dump();
     std::cerr << ')';
   }
+  virtual llvm::Value *codegen() override;
 };
 
 struct CallExprAST : ExprAST {
@@ -58,6 +64,7 @@ struct CallExprAST : ExprAST {
     }
     std::cerr << ')';
   }
+  virtual llvm::Value *codegen() override;
 };
 
 struct ProtoTypeAST : AST {
@@ -78,6 +85,7 @@ struct ProtoTypeAST : AST {
     std::cerr << ')';
     std::cerr << '\n';
   }
+  llvm::Function *codegen();
 };
 
 struct FuncAST : AST {
@@ -90,4 +98,5 @@ struct FuncAST : AST {
     proto.dump();
     body->dump();
   }
+  llvm::Function *codegen();
 };

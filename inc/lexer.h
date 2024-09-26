@@ -26,6 +26,7 @@ struct Lexer {
 
   bool isBinOp() {
     switch (int(tok)) {
+    case '<':
     case '+':
     case '-':
     case '*':
@@ -38,6 +39,8 @@ struct Lexer {
   int getOpPrec() {
     assert(isBinOp());
     switch (int(tok)) {
+    case '<':
+      return 10;
     case '+':
       return 20;
     case '-':
