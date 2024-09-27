@@ -1,38 +1,77 @@
 #include "ast.h"
+#include "jit.h"
 #include "llvm.h"
 
 #include <map>
 
-llvm::LLVMContext theContext;
-llvm::IRBuilder<> Builder(theContext);
-llvm::Module theModule("my cool jit", theContext);
-std::map<std::string, llvm::Value *> NamedValues;
+using namespace llvm;
+using namespace llvm::orc;
 
-// pass and analysis manager
-auto theFunctionPassManager = llvm::FunctionPassManager();
-auto theLoopAnalysisManager = llvm::LoopAnalysisManager();
-auto theFunctionAnalysisManager = llvm::FunctionAnalysisManager();
-auto theCGSCCAnalysisManager = llvm::CGSCCAnalysisManager();
-auto theModuleAnalysisManager = llvm::ModuleAnalysisManager();
-auto thePassInstrumentationCallbacks = llvm::PassInstrumentationCallbacks();
-auto theStandardInstrumentations =
-    llvm::StandardInstrumentations(theContext, true);
-auto thePassBuilder = llvm::PassBuilder();
-auto _ = (theStandardInstrumentations.registerCallbacks(
-              thePassInstrumentationCallbacks, &theModuleAnalysisManager),
-          theFunctionPassManager.addPass(llvm::InstCombinePass()),
-          theFunctionPassManager.addPass(llvm::ReassociatePass()),
-          theFunctionPassManager.addPass(llvm::GVNPass()),
-          theFunctionPassManager.addPass(llvm::SimplifyCFGPass()),
-          thePassBuilder.registerModuleAnalyses(theModuleAnalysisManager),
-          thePassBuilder.registerFunctionAnalyses(theFunctionAnalysisManager),
-          thePassBuilder.crossRegisterProxies(
-              theLoopAnalysisManager, theFunctionAnalysisManager,
-              theCGSCCAnalysisManager, theModuleAnalysisManager),
-          nullptr);
+std::unique_ptr<LLVMContext> TheContext;
+std::unique_ptr<Module> TheModule;
+std::unique_ptr<IRBuilder<>> Builder;
+std::map<std::string, Value *> NamedValues;
+std::unique_ptr<KaleidoscopeJIT> TheJIT;
+std::unique_ptr<FunctionPassManager> TheFPM;
+std::unique_ptr<LoopAnalysisManager> TheLAM;
+std::unique_ptr<FunctionAnalysisManager> TheFAM;
+std::unique_ptr<CGSCCAnalysisManager> TheCGAM;
+std::unique_ptr<ModuleAnalysisManager> TheMAM;
+std::unique_ptr<PassInstrumentationCallbacks> ThePIC;
+std::unique_ptr<StandardInstrumentations> TheSI;
+std::map<std::string, ProtoTypeAST> FunctionProtos;
+ExitOnError ExitOnErr;
+
+Function *getFunction(std::string name) {
+  if (auto F = TheModule->getFunction(name)) {
+    return F;
+  }
+  auto FI = FunctionProtos.find(name);
+  if (FI != FunctionProtos.end()) {
+    return FI->second.codegen();
+  }
+  return nullptr;
+}
+
+void InitializeModuleAndManagers() {
+  // Open a new context and module.
+  TheContext = std::make_unique<LLVMContext>();
+  TheModule = std::make_unique<Module>("KaleidoscopeJIT", *TheContext);
+  TheModule->setDataLayout(TheJIT->getDataLayout());
+
+  // Create a new builder for the module.
+  Builder = std::make_unique<IRBuilder<>>(*TheContext);
+
+  // Create new pass and analysis managers.
+  TheFPM = std::make_unique<FunctionPassManager>();
+  TheLAM = std::make_unique<LoopAnalysisManager>();
+  TheFAM = std::make_unique<FunctionAnalysisManager>();
+  TheCGAM = std::make_unique<CGSCCAnalysisManager>();
+  TheMAM = std::make_unique<ModuleAnalysisManager>();
+  ThePIC = std::make_unique<PassInstrumentationCallbacks>();
+  TheSI = std::make_unique<StandardInstrumentations>(*TheContext,
+                                                     /*DebugLogging*/ true);
+  TheSI->registerCallbacks(*ThePIC, TheMAM.get());
+
+  // Add transform passes.
+  // Do simple "peephole" optimizations and bit-twiddling optzns.
+  TheFPM->addPass(InstCombinePass());
+  // Reassociate expressions.
+  TheFPM->addPass(ReassociatePass());
+  // Eliminate Common SubExpressions.
+  TheFPM->addPass(GVNPass());
+  // Simplify the control flow graph (deleting unreachable blocks, etc).
+  TheFPM->addPass(SimplifyCFGPass());
+
+  // Register analysis passes used in these transform passes.
+  PassBuilder PB;
+  PB.registerModuleAnalyses(*TheMAM);
+  PB.registerFunctionAnalyses(*TheFAM);
+  PB.crossRegisterProxies(*TheLAM, *TheFAM, *TheCGAM, *TheMAM);
+}
 
 llvm::Value *NumExprAST::codegen() {
-  return llvm::ConstantFP::get(theContext, llvm::APFloat(val));
+  return llvm::ConstantFP::get(*TheContext, llvm::APFloat(val));
 }
 
 llvm::Value *VarExprAST::codegen() { return NamedValues[name]; }
@@ -42,35 +81,35 @@ llvm::Value *BinExprAST::codegen() {
   auto R = rhs->codegen();
   switch (op) {
   case '<':
-    L = Builder.CreateFCmpULT(L, R);
-    return Builder.CreateUIToFP(L, llvm::Type::getDoubleTy(theContext));
+    L = Builder->CreateFCmpULT(L, R);
+    return Builder->CreateUIToFP(L, llvm::Type::getDoubleTy(*TheContext));
   case '+':
-    return Builder.CreateFAdd(L, R);
+    return Builder->CreateFAdd(L, R);
   case '-':
-    return Builder.CreateFSub(L, R);
+    return Builder->CreateFSub(L, R);
   case '*':
-    return Builder.CreateFMul(L, R);
+    return Builder->CreateFMul(L, R);
   default:
     return nullptr;
   }
 }
 
 llvm::Value *CallExprAST::codegen() {
-  auto Callee = theModule.getFunction(callee);
+  auto Callee = getFunction(callee);
   std::vector<llvm::Value *> Args;
   for (auto &arg : arguments) {
     Args.push_back(arg->codegen());
   }
-  return Builder.CreateCall(Callee, Args);
+  return Builder->CreateCall(Callee, Args);
 }
 
 llvm::Function *ProtoTypeAST::codegen() {
   std::vector<llvm::Type *> doubles(parameters.size(),
-                                    llvm::Type::getDoubleTy(theContext));
-  auto type = llvm::FunctionType::get(llvm::Type::getDoubleTy(theContext),
+                                    llvm::Type::getDoubleTy(*TheContext));
+  auto type = llvm::FunctionType::get(llvm::Type::getDoubleTy(*TheContext),
                                       doubles, false);
   auto func = llvm::Function::Create(type, llvm::Function::ExternalLinkage,
-                                     name, &theModule);
+                                     name, TheModule.get());
   int i = 0;
   for (auto &arg : func->args()) {
     arg.setName(parameters[i++]);
@@ -80,14 +119,15 @@ llvm::Function *ProtoTypeAST::codegen() {
 
 llvm::Function *FuncAST::codegen() {
   auto func = proto.codegen();
-  auto block = llvm::BasicBlock::Create(theContext, "entry", func);
-  Builder.SetInsertPoint(block);
+  auto block = llvm::BasicBlock::Create(*TheContext, "entry", func);
+  Builder->SetInsertPoint(block);
+  NamedValues.clear();
   for (auto &arg : func->args()) {
     NamedValues[arg.getName().str()] = &arg;
   }
   auto value = body->codegen();
-  Builder.CreateRet(value);
+  Builder->CreateRet(value);
   llvm::verifyFunction(*func);
-  theFunctionPassManager.run(*func, theFunctionAnalysisManager);
+  TheFPM->run(*func, *TheFAM);
   return func;
 }

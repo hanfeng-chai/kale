@@ -19,6 +19,10 @@ add_compile_options(-Wall -Wextra -Werror)
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
 # set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
 
+# Add the -rdynamic option to the linker flags to ensure that all symbols are
+# included in the symbol table, which is useful for debugging and dynamic loading.
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -rdynamic")
+
 # Generate compile_commands.json
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
