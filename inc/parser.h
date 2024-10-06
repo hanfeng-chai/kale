@@ -48,6 +48,26 @@ struct Parser : Lexer {
     return nullptr;
   }
 
+  ExprPtr parseForExpr() {
+    consume(tok_for);
+    auto name = consumeId();
+    consume('=');
+    if (auto Init = parseExpr()) {
+      consume(',');
+      if (auto Cond = parseExpr()) {
+        consume(',');
+        if (auto Next = parseExpr()) {
+          consume(tok_in);
+          if (auto Body = parseExpr())
+            return std::make_unique<ForExprAST>(
+                std::move(name), std::move(Init), std::move(Cond),
+                std::move(Next), std::move(Body));
+        }
+      }
+    }
+    return nullptr;
+  }
+
   ExprPtr parseParenExpr() {
     consume('(');
     if (auto expr = parseExpr()) {
@@ -66,6 +86,8 @@ struct Parser : Lexer {
       return parseVarOrCallExpr();
     case tok_if:
       return parseIfExpr();
+    case tok_for:
+      return parseForExpr();
     case '(':
       return parseParenExpr();
     default:

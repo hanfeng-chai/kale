@@ -82,6 +82,26 @@ struct IfExprAST : ExprAST {
   virtual llvm::Value *codegen() override;
 };
 
+struct ForExprAST : ExprAST {
+  std::string name;
+  ExprPtr Init, Cond, Next, Body;
+  ForExprAST(std::string name, ExprPtr Init, ExprPtr Cond, ExprPtr Next,
+             ExprPtr Body)
+      : name(std::move(name)), Init(std::move(Init)), Cond(std::move(Cond)),
+        Next(std::move(Next)), Body(std::move(Body)) {}
+  virtual void dump() override {
+    std::cerr << "for " << name << " = ";
+    Init->dump();
+    std::cerr << ", ";
+    Cond->dump();
+    std::cerr << ", ";
+    Next->dump();
+    std::cerr << " in ";
+    Body->dump();
+  }
+  virtual llvm::Value *codegen() override;
+};
+
 struct ProtoTypeAST : AST {
   std::string name;
   std::vector<std::string> parameters;

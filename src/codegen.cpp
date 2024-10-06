@@ -133,6 +133,37 @@ llvm::Value *IfExprAST::codegen() {
   return phiNode;
 }
 
+llvm::Value *ForExprAST::codegen() {
+  auto InitV = Init->codegen();
+  auto TheFunction = Builder->GetInsertBlock()->getParent();
+  auto PreheaderBB = Builder->GetInsertBlock();
+  auto LoopBB = BasicBlock::Create(*TheContext);
+  auto ExecBB = BasicBlock::Create(*TheContext);
+  auto AfterBB = BasicBlock::Create(*TheContext);
+  Builder->CreateBr(LoopBB);
+  // Loop
+  TheFunction->insert(TheFunction->end(), LoopBB);
+  Builder->SetInsertPoint(LoopBB);
+  auto phiNode = Builder->CreatePHI(Type::getDoubleTy(*TheContext), 2);
+  phiNode->addIncoming(InitV, PreheaderBB);
+  NamedValues[name] = phiNode;
+  auto CondV = Cond->codegen();
+  CondV =
+      Builder->CreateFCmpONE(CondV, ConstantFP::get(*TheContext, APFloat(0.0)));
+  Builder->CreateCondBr(CondV, ExecBB, AfterBB);
+  // Exec
+  TheFunction->insert(TheFunction->end(), ExecBB);
+  Builder->SetInsertPoint(ExecBB);
+  Body->codegen();
+  auto NextV = Next->codegen();
+  phiNode->addIncoming(NextV, ExecBB);
+  Builder->CreateBr(LoopBB);
+  // After
+  TheFunction->insert(TheFunction->end(), AfterBB);
+  Builder->SetInsertPoint(AfterBB);
+  return Constant::getNullValue(Type::getDoubleTy(*TheContext));
+}
+
 llvm::Function *ProtoTypeAST::codegen() {
   std::vector<llvm::Type *> doubles(parameters.size(),
                                     llvm::Type::getDoubleTy(*TheContext));
