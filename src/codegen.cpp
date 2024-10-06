@@ -103,6 +103,36 @@ llvm::Value *CallExprAST::codegen() {
   return Builder->CreateCall(Callee, Args);
 }
 
+llvm::Value *IfExprAST::codegen() {
+  auto CondV = Cond->codegen();
+  CondV =
+      Builder->CreateFCmpONE(CondV, ConstantFP::get(*TheContext, APFloat(0.0)));
+  auto TheFunction = Builder->GetInsertBlock()->getParent();
+  auto ThenBB = BasicBlock::Create(*TheContext);
+  auto ElseBB = BasicBlock::Create(*TheContext);
+  auto MergeBB = BasicBlock::Create(*TheContext);
+  Builder->CreateCondBr(CondV, ThenBB, ElseBB);
+  // Then
+  TheFunction->insert(TheFunction->end(), ThenBB);
+  Builder->SetInsertPoint(ThenBB);
+  auto ThenV = Then->codegen();
+  Builder->CreateBr(MergeBB);
+  ThenBB = Builder->GetInsertBlock();
+  // Else
+  TheFunction->insert(TheFunction->end(), ElseBB);
+  Builder->SetInsertPoint(ElseBB);
+  auto ElseV = Else->codegen();
+  Builder->CreateBr(MergeBB);
+  ElseBB = Builder->GetInsertBlock();
+  // Merge
+  TheFunction->insert(TheFunction->end(), MergeBB);
+  Builder->SetInsertPoint(MergeBB);
+  auto phiNode = Builder->CreatePHI(Type::getDoubleTy(*TheContext), 2);
+  phiNode->addIncoming(ThenV, ThenBB);
+  phiNode->addIncoming(ElseV, ElseBB);
+  return phiNode;
+}
+
 llvm::Function *ProtoTypeAST::codegen() {
   std::vector<llvm::Type *> doubles(parameters.size(),
                                     llvm::Type::getDoubleTy(*TheContext));

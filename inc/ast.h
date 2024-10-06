@@ -67,6 +67,21 @@ struct CallExprAST : ExprAST {
   virtual llvm::Value *codegen() override;
 };
 
+struct IfExprAST : ExprAST {
+  ExprPtr Cond, Then, Else;
+  IfExprAST(ExprPtr Cond, ExprPtr Then, ExprPtr Else)
+      : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
+  virtual void dump() override {
+    std::cerr << "if ";
+    Cond->dump();
+    std::cerr << " then ";
+    Then->dump();
+    std::cerr << " else ";
+    Else->dump();
+  }
+  virtual llvm::Value *codegen() override;
+};
+
 struct ProtoTypeAST : AST {
   std::string name;
   std::vector<std::string> parameters;

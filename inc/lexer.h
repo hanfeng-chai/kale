@@ -14,6 +14,11 @@ enum Token {
   // primary
   tok_id = -4,
   tok_num = -5,
+
+  // keyword
+  tok_if = -6,
+  tok_then = -7,
+  tok_else = -8,
 };
 
 struct Lexer {
@@ -103,6 +108,12 @@ struct Lexer {
         return tok = tok_def;
       if (id == "ext")
         return tok = tok_ext;
+      if (id == "if")
+        return tok = tok_if;
+      if (id == "then")
+        return tok = tok_then;
+      if (id == "else")
+        return tok = tok_else;
       return tok = tok_id;
     }
     if (std::isdigit(ch)) {

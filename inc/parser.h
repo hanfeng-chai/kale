@@ -33,6 +33,21 @@ struct Parser : Lexer {
     }
   }
 
+  ExprPtr parseIfExpr() {
+    consume(tok_if);
+    if (auto Cond = parseExpr()) {
+      consume(tok_then);
+      if (auto Then = parseExpr()) {
+        consume(tok_else);
+        if (auto Else = parseExpr()) {
+          return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then),
+                                             std::move(Else));
+        }
+      }
+    }
+    return nullptr;
+  }
+
   ExprPtr parseParenExpr() {
     consume('(');
     if (auto expr = parseExpr()) {
@@ -49,6 +64,8 @@ struct Parser : Lexer {
       return parseNumExpr();
     case tok_id:
       return parseVarOrCallExpr();
+    case tok_if:
+      return parseIfExpr();
     case '(':
       return parseParenExpr();
     default:
